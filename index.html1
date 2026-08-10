@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SULOFC - FC27</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #111;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+        #scoreboard {
+            display: flex;
+            justify-content: space-around;
+            width: 800px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px;
+            border-radius: 8px 8px 0 0;
+            border: 2px solid #333;
+            border-bottom: none;
+            font-size: 20px;
+            font-weight: bold;
+            letter-spacing: 2px;
+        }
+        .team-sulo { color: #00ffff; }
+        .team-rival { color: #ff3333; }
+        canvas {
+            background: #2e8b57;
+            display: block;
+            border: 4px solid #fff;
+            border-top: none;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+        }
+        #controls-info {
+            margin-top: 8px;
+            font-size: 13px;
+            color: #aaa;
+            background: rgba(255,255,255,0.05);
+            padding: 6px 15px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="scoreboard">
+        <div>SULOFC: <span id="suloScore" class="team-sulo">0</span></div>
+        <div>SÜRE: <span id="timer">03:00</span></div>
+        <div>RAKİP: <span id="rivalScore" class="team-rival">0</span></div>
+    </div>
+
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
+
+    <div id="controls-info">
+        <b>W, A, S, D:</b> Hareket | <b>SHIFT:</b> Sprint | <b>J:</b> Şut | <b>K:</b> Pas | <b>L:</b> Çalım | <b>I:</b> Kayma
+    </div>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+// Oyun Değişkenleri
+let suloScore = 0;
+let rivalScore = 0;
+
+// Tuş Kontrolleri
+const keys = {};
+window.addEventListener("keydown", (e) => keys[e.key.toLowerCase()] = true);
+window.addEventListener("keyup", (e) => keys[e.key.toLowerCase()] = false);
+
+// Top Objesi
+const ball = {
+    x: 400,
+    y: 250,
+    vx: 0,
+    vy: 0,
+    radius: 8,
+    friction: 0.98
+};
+
+// Oyuncu Sınıfı
+class Player {
+    constructor(x, y, color, isControlled = false) {
+        this.x = x;
+        this.y = y;
+        this.vx = 0;
+        this.vy = 0;
+        this.radius = 14;
+        this.color = color;
+        this.isControlled = isControlled;
+        this.speed = 3.2;
+        this.maxSpeed = 3.2;
+        this.hasBall = false;
+        this.isSliding = false;
+        this.slideTimer = 0;
+    }
+
+    update() {
+        if (this.isControlled) {
+            let currentSpeed = this.speed;
+            if (keys["shift"]) currentSpeed = 5.2; // Sprint
+
+            let dx = 0, dy = 0;
+            if (keys["w"]) dy = -currentSpeed;
+            if (keys["s"]) dy = currentSpeed;
+            if (keys["a"]) dx = -currentSpeed;
+            if (keys["d"]) dx = currentSpeed;
+
+            this.x += dx;
+            this.y += dy;
+
+            // Kayma Mekaniği (I tuşu)
+            if (keys["i"] && this.slideTimer === 0) {
+                this.isSliding = true;
+                this.slideTimer = 40; // Süre
+                this.vx = dx * 1.8;
+                this.vy = dy * 1.8;
+            }
+
+            if (this.isSliding) {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.slideTimer--;
+                if (this.slideTimer <= 0) this.isSliding = false;
+            }
+
+        } else {
+            // Basit Yapay Zeka (Rakip Takım)
+            let targetX = ball.x;
+            let targetY = ball.y;
+            if (targetX > this.x) this.x += 1.5;
+            if (targetX < this.x) this.x -= 1.5;
+            if (targetY > this.y) this.y += 1.5;
+            if (targetY < this.y) this.y -= 1.5;
+        }
+
+        // Saha Sınırları
+        if (this.x < 30) this.x = 30;
+        if (this.x > 770) this.x = 770;
+        if (this.y < 30) this.y = 30;
+        if (this.y > 470) this.y = 470;
+    }
+
+    draw() {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = this.isSliding ? "#fff" : this.color;
+        ctx.fill();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = "#111";
+        ctx.stroke();
+        ctx.closePath();
+
+        // Çalım Efekti / Göstergesi
+        if (this.isControlled) {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 4, 0, Math.PI * 2);
+            ctx.strokeStyle = "rgba(0, 255, 255, 0.4)";
+            ctx.stroke();
+            ctx.closePath();
+        }
+    }
+}
+
+// Oyuncuları Oluştur (5'e 5)
+const suloTeam = [
+    new Player(150, 250, "#00ffff", true), // Kontrol Edilen Oyuncu (Kaptan Sulo)
+    new Player(90, 150, "#00bcd4"),
+    new Player(90, 350, "#00bcd4"),
+    new Player(50, 200, "#00bcd4"),
+    new Player(50, 300, "#00bcd4"),
+];
+
+const rivalTeam = [
+    new Player(650, 250, "#ff3333"),
+    new Player(710, 150, "#ff5722"),
+    new Player(710, 350, "#ff5722"),
+    new Player(750, 200, "#ff5722"),
+    new Player(750, 300, "#ff5722"),
+];
+
+// Aksiyonlar (Şut, Pas, Çalım)
+window.addEventListener("keydown", (e) => {
+    let player = suloTeam[0];
+    let dist = Math.hypot(player.x - ball.x, player.y - ball.y);
+
+    if (dist < 30) {
+        if (e.key.toLowerCase() === "j") { // Şut
+            ball.vx = 12;
+            ball.vy = (Math.random() - 0.5) * 4;
+        }
+        if (e.key.toLowerCase() === "k") { // Pas
+            ball.vx = 6;
+            ball.vy = (Math.random() - 0.5) * 2;
+        }
+        if (e.key.toLowerCase() === "l") { // Çalım (Hızlanma / Yön Atma)
+            player.x += 30;
+        }
+    }
+});
+
+// Saha Çizimleri
+function drawField() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Çim Desenleri
+    ctx.fillStyle = "#277a4c";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+    ctx.lineWidth = 3;
+
+    // Orta Çizgi ve Yuvarlak
+    ctx.beginPath();
+    ctx.moveTo(canvas.width / 2, 0);
+    ctx.lineTo(canvas.width / 2, canvas.height);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(canvas.width / 2, canvas.height / 2, 60, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Kaleler
+    // Sol Kale (Sulofc)
+    ctx.strokeRect(0, 175, 20, 150);
+    // Sağ Kale (Rakip)
+    ctx.strokeRect(780, 175, 20, 150);
+}
+
+// Fizik ve Mantık Güncellemeleri
+function update() {
+    // Top Hareketi
+    ball.x += ball.vx;
+    ball.y += ball.vy;
+    ball.vx *= ball.friction;
+    ball.vy *= ball.friction;
+
+    // Sınır Çarpışmaları
+    if (ball.y < 10 || ball.y > 490) ball.vy *= -1;
+
+    // Gol Kontrolleri
+    if (ball.x <= 20 && ball.y >= 175 && ball.y <= 325) {
+        rivalScore++;
+        document.getElementById("rivalScore").innerText = rivalScore;
+        resetBall();
+    }
+    if (ball.x >= 780 && ball.y >= 175 && ball.y <= 325) {
+        suloScore++;
+        document.getElementById("suloScore").innerText = suloScore;
+        resetBall();
+    }
+
+    // Yan Çizgi Sekmeleri
+    if (ball.x < 10) { ball.x = 10; ball.vx *= -1; }
+    if (ball.x > 790) { ball.x = 790; ball.vx *= -1; }
+
+    // Oyuncuları Güncelle
+    suloTeam.forEach(p => p.update());
+    rivalTeam.forEach(p => p.update());
+}
+
+function resetBall() {
+    ball.x = 400;
+    ball.y = 250;
+    ball.vx = 0;
+    ball.vy = 0;
+}
+
+// Ana Oyun Döngüsü
+function gameLoop() {
+    drawField();
+
+    // Topu Çiz
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+    ctx.fillStyle = "#fff";
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "#000";
+    ctx.stroke();
+    ctx.closePath();
+
+    // Oyuncuları Çiz
+    suloTeam.forEach(p => p.draw());
+    rivalTeam.forEach(p => p.draw());
+
+    update();
+    requestAnimationFrame(gameLoop);
+}
+
+gameLoop();
+</script>
+
+</body>
+</html>
